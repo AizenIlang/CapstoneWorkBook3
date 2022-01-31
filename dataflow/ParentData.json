@@ -1,0 +1,105 @@
+{
+	"name": "ParentData",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ExcelParentData",
+						"type": "DatasetReference"
+					},
+					"name": "ParentData"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "CsvOutput",
+						"type": "DatasetReference"
+					},
+					"name": "DstCompliant"
+				},
+				{
+					"dataset": {
+						"referenceName": "CsvOutput",
+						"type": "DatasetReference"
+					},
+					"name": "DstNonCompliant"
+				}
+			],
+			"transformations": [
+				{
+					"name": "ConditionalSplit1"
+				},
+				{
+					"name": "ConditionalSplit2"
+				},
+				{
+					"name": "GetSumForClickViewImpression"
+				},
+				{
+					"name": "StaticYearandQuarter"
+				},
+				{
+					"name": "ConditionalSplit3"
+				},
+				{
+					"name": "QuarterYear"
+				},
+				{
+					"name": "YearQuarter"
+				},
+				{
+					"name": "ConditionalSplit4"
+				},
+				{
+					"name": "YearQuarters"
+				},
+				{
+					"name": "QuartersYear"
+				},
+				{
+					"name": "YearandQuarter"
+				},
+				{
+					"name": "QuarterandYear"
+				},
+				{
+					"name": "YearandQuarters"
+				},
+				{
+					"name": "QuartersandYear"
+				},
+				{
+					"name": "RemoveQuarterYear"
+				},
+				{
+					"name": "RemoveYearQuarter"
+				},
+				{
+					"name": "RemoveYearQuarters"
+				},
+				{
+					"name": "RemoveQuartersYear"
+				},
+				{
+					"name": "UnionQuartersYear"
+				},
+				{
+					"name": "UnionYearQuarter"
+				},
+				{
+					"name": "UnionQuarterYear"
+				},
+				{
+					"name": "UnionStaticYearandQuarter"
+				},
+				{
+					"name": "DerivedColumn1"
+				}
+			],
+			"script": "source(output(\n\t\tSOURCE as string,\n\t\t{xMedia Group} as string,\n\t\t{MEDIA TYPE} as string,\n\t\t{xMedia Channel} as string,\n\t\t{Agency Channel Name} as string,\n\t\t{Campaign Name} as string,\n\t\tAccount as string,\n\t\tLOB as string,\n\t\tBU as string,\n\t\t{PARENT CAMPAIGN NAME} as string,\n\t\t{SUB CAMPAIGN NAME} as string,\n\t\t{COUNTRY CODE} as string,\n\t\t{COUNTRY NAME} as string,\n\t\tREGION as string,\n\t\t{xCampaign Quarter} as string,\n\t\t{Search Keyword Type} as string,\n\t\t{Search Match Type} as string,\n\t\t{Emea Region} as string,\n\t\t{Emea Sub Region} as string,\n\t\t{xAccount Currency} as string,\n\t\tCompliant as string,\n\t\t{Agency Owner Market} as string,\n\t\t{Campaign Scale} as string,\n\t\t{Campaign Objective} as string,\n\t\t{Media Brief Name} as string,\n\t\t{Impression } as string,\n\t\tClick as string,\n\t\tView as string,\n\t\t{Swipe rate} as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\tpartitionBy('hash', 1)) ~> ParentData\nParentData split(Compliant == \"Compliant\",\n\tCompliant == \"Non-Compliant\" || Compliant == \"Non Compliant\",\n\tdisjoint: false,\n\tpartitionBy('hash', 1)) ~> ConditionalSplit1@(Compliant, NonCompliant, Others)\nParentData split(length( {xCampaign Quarter}) == 2,\n\tlength( {xCampaign Quarter}) == 7,\n\tlength( {xCampaign Quarter}) == 10,\n\tdisjoint: false,\n\tpartitionBy('hash', 1)) ~> ConditionalSplit2@(Quarter, YearQuarter, YearQuarters, NotQuarter)\nParentData aggregate({TotalImpression } = sum({Impression }),\n\t\tTotalClick = sum(Click),\n\t\tTotalView = sum(View),\n\tpartitionBy('hash', 1)) ~> GetSumForClickViewImpression\nConditionalSplit2@Quarter derive(Year = \"2020\",\n\t\tQuarter = {xCampaign Quarter},\n\tpartitionBy('hash', 1)) ~> StaticYearandQuarter\nConditionalSplit2@YearQuarter split(startsWith({xCampaign Quarter}, \"2\")\r\n,\n\tdisjoint: false,\n\tpartitionBy('hash', 1)) ~> ConditionalSplit3@(QQyyyy, yyyyQQ)\nConditionalSplit3@QQyyyy derive(QuarterYear = split( {xCampaign Quarter}, \"-\"),\n\tpartitionBy('hash', 1)) ~> QuarterYear\nConditionalSplit3@yyyyQQ derive(YearQuarter = split( {xCampaign Quarter}, \"-\"),\n\tpartitionBy('hash', 1)) ~> YearQuarter\nConditionalSplit2@YearQuarters split(startsWith({xCampaign Quarter}, \"2\"),\n\tdisjoint: false) ~> ConditionalSplit4@(yyyyQQqq, QQqqyyyy)\nConditionalSplit4@yyyyQQqq derive(YearQuarters = split( {xCampaign Quarter}, \"-\"),\n\tpartitionBy('hash', 1)) ~> YearQuarters\nConditionalSplit4@QQqqyyyy derive(QuartersYear = split( {xCampaign Quarter}, \"-\"),\n\tpartitionBy('hash', 1)) ~> QuartersYear\nQuarterYear derive(Year = QuarterYear[1],\n\t\tQuarter = QuarterYear[2],\n\tpartitionBy('hash', 1)) ~> YearandQuarter\nYearQuarter derive(Year = iif(startsWith(YearQuarter[2], \"F\"),concat(\"20\", substring(YearQuarter[2], 3, 2)),YearQuarter[2]),\n\t\tQuarter = YearQuarter[1],\n\tpartitionBy('hash', 1)) ~> QuarterandYear\nYearQuarters derive(Year = YearQuarters[1],\n\t\tQuarter = concat(YearQuarters[2],\"-\", YearQuarters[3]),\n\tpartitionBy('hash', 1)) ~> YearandQuarters\nQuartersYear derive(Quarter = concat(QuartersYear[1],\"-\", QuartersYear[2]),\n\t\tYear = iif(startsWith(QuartersYear[3], \"F\"),concat(\"20\", substring(QuartersYear[3], 3, 2)),QuartersYear[3]),\n\tpartitionBy('hash', 1)) ~> QuartersandYear\nYearandQuarter select(mapColumn(\n\t\tSOURCE,\n\t\t{xMedia Group},\n\t\t{MEDIA TYPE},\n\t\t{xMedia Channel},\n\t\t{Agency Channel Name},\n\t\t{Campaign Name},\n\t\tAccount,\n\t\tLOB,\n\t\tBU,\n\t\t{PARENT CAMPAIGN NAME},\n\t\t{SUB CAMPAIGN NAME},\n\t\t{COUNTRY CODE},\n\t\t{COUNTRY NAME},\n\t\tREGION,\n\t\t{xCampaign Quarter},\n\t\t{Search Keyword Type},\n\t\t{Search Match Type},\n\t\t{Emea Region},\n\t\t{Emea Sub Region},\n\t\t{xAccount Currency},\n\t\tCompliant,\n\t\t{Agency Owner Market},\n\t\t{Campaign Scale},\n\t\t{Campaign Objective},\n\t\t{Media Brief Name},\n\t\t{Impression },\n\t\tClick,\n\t\tView,\n\t\t{Swipe rate},\n\t\tYear,\n\t\tQuarter\n\t),\n\tpartitionBy('hash', 1),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> RemoveQuarterYear\nQuarterandYear select(mapColumn(\n\t\tSOURCE,\n\t\t{xMedia Group},\n\t\t{MEDIA TYPE},\n\t\t{xMedia Channel},\n\t\t{Agency Channel Name},\n\t\t{Campaign Name},\n\t\tAccount,\n\t\tLOB,\n\t\tBU,\n\t\t{PARENT CAMPAIGN NAME},\n\t\t{SUB CAMPAIGN NAME},\n\t\t{COUNTRY CODE},\n\t\t{COUNTRY NAME},\n\t\tREGION,\n\t\t{xCampaign Quarter},\n\t\t{Search Keyword Type},\n\t\t{Search Match Type},\n\t\t{Emea Region},\n\t\t{Emea Sub Region},\n\t\t{xAccount Currency},\n\t\tCompliant,\n\t\t{Agency Owner Market},\n\t\t{Campaign Scale},\n\t\t{Campaign Objective},\n\t\t{Media Brief Name},\n\t\t{Impression },\n\t\tClick,\n\t\tView,\n\t\t{Swipe rate},\n\t\tYear,\n\t\tQuarter\n\t),\n\tpartitionBy('hash', 1),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> RemoveYearQuarter\nYearandQuarters select(mapColumn(\n\t\tSOURCE,\n\t\t{xMedia Group},\n\t\t{MEDIA TYPE},\n\t\t{xMedia Channel},\n\t\t{Agency Channel Name},\n\t\t{Campaign Name},\n\t\tAccount,\n\t\tLOB,\n\t\tBU,\n\t\t{PARENT CAMPAIGN NAME},\n\t\t{SUB CAMPAIGN NAME},\n\t\t{COUNTRY CODE},\n\t\t{COUNTRY NAME},\n\t\tREGION,\n\t\t{xCampaign Quarter},\n\t\t{Search Keyword Type},\n\t\t{Search Match Type},\n\t\t{Emea Region},\n\t\t{Emea Sub Region},\n\t\t{xAccount Currency},\n\t\tCompliant,\n\t\t{Agency Owner Market},\n\t\t{Campaign Scale},\n\t\t{Campaign Objective},\n\t\t{Media Brief Name},\n\t\t{Impression },\n\t\tClick,\n\t\tView,\n\t\t{Swipe rate},\n\t\tYear,\n\t\tQuarter\n\t),\n\tpartitionBy('hash', 1),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> RemoveYearQuarters\nQuartersandYear select(mapColumn(\n\t\tSOURCE,\n\t\t{xMedia Group},\n\t\t{MEDIA TYPE},\n\t\t{xMedia Channel},\n\t\t{Agency Channel Name},\n\t\t{Campaign Name},\n\t\tAccount,\n\t\tLOB,\n\t\tBU,\n\t\t{PARENT CAMPAIGN NAME},\n\t\t{SUB CAMPAIGN NAME},\n\t\t{COUNTRY CODE},\n\t\t{COUNTRY NAME},\n\t\tREGION,\n\t\t{xCampaign Quarter},\n\t\t{Search Keyword Type},\n\t\t{Search Match Type},\n\t\t{Emea Region},\n\t\t{Emea Sub Region},\n\t\t{xAccount Currency},\n\t\tCompliant,\n\t\t{Agency Owner Market},\n\t\t{Campaign Scale},\n\t\t{Campaign Objective},\n\t\t{Media Brief Name},\n\t\t{Impression },\n\t\tClick,\n\t\tView,\n\t\t{Swipe rate},\n\t\tQuarter,\n\t\tYear\n\t),\n\tpartitionBy('hash', 1),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> RemoveQuartersYear\nRemoveQuartersYear, RemoveYearQuarters union(byName: true,\n\tpartitionBy('hash', 1))~> UnionQuartersYear\nUnionQuartersYear, RemoveYearQuarter union(byName: true,\n\tpartitionBy('hash', 1))~> UnionYearQuarter\nUnionYearQuarter, RemoveQuarterYear union(byName: true,\n\tpartitionBy('hash', 1))~> UnionQuarterYear\nUnionQuarterYear, StaticYearandQuarter union(byName: true,\n\tpartitionBy('hash', 1))~> UnionStaticYearandQuarter\nUnionStaticYearandQuarter derive(REGION = iifNull(REGION, \"Unclassified\") ,\n\t\t{xCampaign Quarter} = iifNull({xCampaign Quarter}, \"Unclassified\") ,\n\t\t{Search Keyword Type} = iifNull({Search Keyword Type}, \"Unclassified\") ,\n\t\t{Search Match Type} = iifNull({Search Match Type}, \"Unclassified\") ,\n\t\t{Emea Region} = iifNull({Emea Region}, \"Unclassified\") ,\n\t\t{Emea Sub Region} = iifNull({Emea Sub Region}, \"Unclassified\") ,\n\t\t{xAccount Currency} = iifNull({xAccount Currency}, \"Unclassified\") ,\n\t\tcolumn1 = ERROR_FUNCTION('')) ~> DerivedColumn1\nConditionalSplit1@Compliant sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tpartitionFileNames:['Compliant.csv'],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tpartitionBy('hash', 1)) ~> DstCompliant\nConditionalSplit1@NonCompliant sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tpartitionFileNames:['NonCompliant.csv'],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tpartitionBy('hash', 1)) ~> DstNonCompliant"
+		}
+	}
+}
